@@ -3,11 +3,18 @@ const Io = std.Io;
 const rl = @import("raylib");
 const ZGL = @import("SpacialGrid").ZigGridLib(.{});
 
+const EntType = enum { rect, circle, point };
+
+const EntRef = struct {
+    kind: EntType,
+    index: usize,
+};
+
 const RectEnt = struct {
-    x: f32, 
+    x: f32,
     y: f32,
     w: f32 = 15,
-    h: f32 = 15, 
+    h: f32 = 15,
     x_vel: f32,
     y_vel: f32,
     color: rl.Color = .gray,
@@ -15,7 +22,7 @@ const RectEnt = struct {
 };
 
 const CircleEnt = struct {
-    x: f32, 
+    x: f32,
     y: f32,
     r: f32 = 15,
     x_vel: f32,
@@ -24,12 +31,23 @@ const CircleEnt = struct {
     id: u32,
 };
 
+const PointEnt = struct {
+    x: f32,
+    y: f32,
+    color: rl.Color = .gray,
+    id: u32,
+};
+
 const screenWidth = 800;
 const screenHeight = 800;
-const rect_count = 100;
-const circle_count = 100;
+const rect_count = 50;
+const circle_count = 50;
+const point_count = 50;
+const point_radius = 3;
 const speed = 100;
-var id: u32 = 0;
+
+var ents: []EntRef = undefined;
+var ent_counter: usize = 0;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -40,10 +58,13 @@ pub fn main(init: std.process.Init) !void {
         .io = io,
         .width = screenWidth,
         .height = screenHeight,
-        .cell_size_multiplier = 2, 
-        .multi_threaded = false,
+        .cell_size_multiplier = 2,
+        .multi_threaded = true,
     });
     defer grid.deinit();
+
+    ents = try allocator.alloc(EntRef, rect_count + point_count + circle_count);
+    defer allocator.free(ents);
 
     var rects: std.MultiArrayList(RectEnt) = .empty;
     defer rects.deinit(allocator);
@@ -53,11 +74,15 @@ pub fn main(init: std.process.Init) !void {
     defer circles.deinit(allocator);
     try genCircles(allocator, io, &circles);
 
+    var points: std.MultiArrayList(PointEnt) = .empty;
+    defer points.deinit(allocator);
+    try genPoints(allocator, io, &points);
+
     rl.initWindow(screenWidth, screenHeight, "Test");
-    defer rl.closeWindow(); 
+    defer rl.closeWindow();
 
     rl.setTargetFPS(60);
-                         
+
     const rect_xs = rects.items(.x);
     const rect_ys = rects.items(.y);
     const rect_ws = rects.items(.w);
@@ -75,66 +100,88 @@ pub fn main(init: std.process.Init) !void {
     const circle_x_vels = circles.items(.x_vel);
     const circle_y_vels = circles.items(.y_vel);
 
-    try grid.ensureCapacity(rects.len, .Rect);
+    const point_xs = points.items(.x);
+    const point_ys = points.items(.y);
+    const point_ids = points.items(.id);
+    const point_colors = points.items(.color);
+
     try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
+    try grid.insertCircles(circle_ids, circle_xs, circle_ys, circle_rs);
+    try grid.insertPoints(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
     // gameloop
-    while(!rl.windowShouldClose()) { // Detect window close button or ESC key
+    while (!rl.windowShouldClose()) { // Detect window close button or ESC key
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.white);
 
-        try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
-        try grid.insertCircles(circle_ids, circle_xs, circle_ys, circle_rs);
-
-        for(rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
+        for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
             color.* = .gray;
             move(x, x_vel, y, y_vel);
             bounce(x, x_vel, w, screenWidth);
             bounce(y, y_vel, h, screenHeight);
         }
 
-        for(circle_xs, circle_x_vels, circle_ys, circle_y_vels, circle_rs, circle_colors) |*x, *x_vel, *y, *y_vel, r, *color| {
+        for (circle_xs, circle_x_vels, circle_ys, circle_y_vels, circle_rs, circle_colors) |*x, *x_vel, *y, *y_vel, r, *color| {
             color.* = .gray;
             move(x, x_vel, y, y_vel);
             bounce(x, x_vel, r, screenWidth);
             bounce(y, y_vel, r, screenHeight);
         }
 
-        const results = try grid.update();
-        if(results.items.len == 0) std.debug.print("No results \r", .{});
-        for(results.items) |result| {
-            if(std.mem.findScalar(u32, rect_ids, result.a)) |idx| {
-                var ent = rects.get(idx); 
-                ent.color = .green;
-                rects.set(idx, ent);
-            }
-            else if(std.mem.findScalar(u32, circle_ids, result.a)) |idx| {
-                var ent = circles.get(idx); 
-                ent.color = .green;
-                circles.set(idx, ent);
-            }
+        try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
+        try grid.insertCircles(circle_ids, circle_xs, circle_ys, circle_rs);
+        try grid.insertPoints(point_ids, point_xs, point_ys);
 
-            if(std.mem.findScalar(u32, rect_ids, result.b)) |idx| {
-                var ent = rects.get(idx); 
-                ent.color = .green;
-                rects.set(idx, ent);
-            }
-            else if(std.mem.findScalar(u32, circle_ids, result.b)) |idx| {
-                var ent = circles.get(idx); 
-                ent.color = .green;
-                circles.set(idx, ent);
-            }
+        for (point_colors) |*color| {
+            color.* = .gray;
         }
 
-        for(rect_xs, rect_ys, rect_ws, rect_hs, rect_colors) |x, y, w, h, color| {
+        const results = try grid.update();
+        if (results.items.len == 0) std.debug.print("No results \r", .{});
+        for (results.items) |result| {
+            markCollision(result.a, &rects, &circles, &points);
+            markCollision(result.b, &rects, &circles, &points);
+        }
+
+        for (rect_xs, rect_ys, rect_ws, rect_hs, rect_colors) |x, y, w, h, color| {
             rl.drawRectangleV(.init(x, y), .init(w, h), color);
         }
 
-        for(circle_xs, circle_ys, circle_rs, circle_colors) |x, y, r, color| {
+        for (circle_xs, circle_ys, circle_rs, circle_colors) |x, y, r, color| {
             rl.drawCircleV(.init(x, y), r, color);
         }
+
+        for (point_xs, point_ys, point_colors) |x, y, color| {
+            rl.drawCircleV(.init(x, y), point_radius, color);
+        }
+    }
+}
+
+fn markCollision(
+    global_id: u32,
+    rects: *std.MultiArrayList(RectEnt),
+    circles: *std.MultiArrayList(CircleEnt),
+    points: *std.MultiArrayList(PointEnt),
+) void {
+    const ent_ref = ents[@intCast(global_id)];
+    switch (ent_ref.kind) {
+        .rect => {
+            var ent = rects.get(ent_ref.index);
+            ent.color = .green;
+            rects.set(ent_ref.index, ent);
+        },
+        .circle => {
+            var ent = circles.get(ent_ref.index);
+            ent.color = .green;
+            circles.set(ent_ref.index, ent);
+        },
+        .point => {
+            var ent = points.get(ent_ref.index);
+            ent.color = .green;
+            points.set(ent_ref.index, ent);
+        },
     }
 }
 
@@ -144,56 +191,84 @@ fn move(x: *f32, x_vel: *f32, y: *f32, y_vel: *f32) void {
 }
 
 fn bounce(pos: *f32, vel: *f32, size: f32, bound: f32) void {
-    if(pos.* < 0) {
+    if (pos.* < 0) {
         pos.* = 0;
         vel.* = @abs(vel.*);
-    } else if(pos.* + size > bound) {
+    } else if (pos.* + size > bound) {
         pos.* = bound - size;
         vel.* = -@abs(vel.*);
     }
 }
 
 fn genRects(allocator: std.mem.Allocator, io: std.Io, rects: *std.MultiArrayList(RectEnt)) !void {
-    const src: std.Random.IoSource = .{.io = io};
+    const src: std.Random.IoSource = .{ .io = io };
     const rng = src.interface();
 
-    for(0..rect_count) |_| {
+    for (0..rect_count) |_| {
         const x: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenWidth));
         const y: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenHeight));
-        const x_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
-        const y_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const x_vel: f32 = if (rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const y_vel: f32 = if (rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
 
         const rect: RectEnt = .{
             .x = x,
             .y = y,
             .x_vel = x_vel,
             .y_vel = y_vel,
-            .id = id,
+            .id = @intCast(ent_counter),
         };
+        const local_index = rects.len;
         try rects.append(allocator, rect);
-        id += 1;
+
+        ents[ent_counter] = .{ .kind = .rect, .index = local_index };
+        ent_counter += 1;
     }
 }
 
 fn genCircles(allocator: std.mem.Allocator, io: std.Io, circles: *std.MultiArrayList(CircleEnt)) !void {
-    const src: std.Random.IoSource = .{.io = io};
+    const src: std.Random.IoSource = .{ .io = io };
     const rng = src.interface();
 
-    for(0..rect_count) |_| {
+    for (0..circle_count) |_| {
         const x: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenWidth));
         const y: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenHeight));
-        const x_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
-        const y_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const x_vel: f32 = if (rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const y_vel: f32 = if (rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
 
         const circle: CircleEnt = .{
             .x = x,
             .y = y,
             .x_vel = x_vel,
             .y_vel = y_vel,
-            .id = id,
+            .id = @intCast(ent_counter),
         };
 
+        const local_index = circles.len;
         try circles.append(allocator, circle);
-        id += 1;
+
+        ents[ent_counter] = .{ .kind = .circle, .index = local_index };
+        ent_counter += 1;
+    }
+}
+
+fn genPoints(allocator: std.mem.Allocator, io: std.Io, points: *std.MultiArrayList(PointEnt)) !void {
+    const src: std.Random.IoSource = .{ .io = io };
+    const rng = src.interface();
+
+    for (0..point_count) |_| {
+        const x: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenWidth));
+        const y: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenHeight));
+
+        const point: PointEnt = .{
+            .x = x,
+            .y = y,
+            .id = @intCast(ent_counter),
+        };
+
+        const local_index = points.len;
+        try points.append(allocator, point);
+
+        ents[ent_counter] = .{ .kind = .point, .index = local_index };
+        ent_counter += 1;
     }
 }

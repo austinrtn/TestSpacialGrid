@@ -38,7 +38,7 @@
         },
         .SpacialGrid = .{
             .url = "https://github.com/austinrtn/SpacialGrid/archive/refs/heads/master.tar.gz",
-            .hash = "SpacialGrid-0.0.0-JQsE6HI1AQAMb-jYAEftV-B4NRbRVEaun4DPqY0qaXdZ",
+            .hash = "SpacialGrid-0.0.0-JQsE6I42AQAVggUgkIpi6XDZ-54YoO3hS5zLZJaajmFB",
         },
     },
     .paths = .{
