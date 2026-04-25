@@ -3,24 +3,37 @@ const Io = std.Io;
 const rl = @import("raylib");
 const ZGL = @import("SpacialGrid").ZigGridLib(.{});
 
-const SpawnLoc = enum {top, bottom, left, right};
 const RectEnt = struct {
     x: f32, 
     y: f32,
-    w: f32, 
-    h: f32, 
+    w: f32 = 15,
+    h: f32 = 15, 
+    x_vel: f32,
+    y_vel: f32,
+    color: rl.Color = .gray,
     id: u32,
-    spawn_loc: SpawnLoc,
-    passed_test: bool = false,
 };
+
+const CircleEnt = struct {
+    x: f32, 
+    y: f32,
+    r: f32 = 15,
+    x_vel: f32,
+    y_vel: f32,
+    color: rl.Color = .gray,
+    id: u32,
+};
+
+const screenWidth = 800;
+const screenHeight = 800;
+const rect_count = 100;
+const circle_count = 100;
+const speed = 100;
+var id: u32 = 0;
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
-
-    const screenWidth = 800;
-    const screenHeight = 800;
-    const speed = 250;
 
     var grid: *ZGL.SpacialGrid = try .init(.{
         .allocator = allocator,
@@ -28,88 +41,159 @@ pub fn main(init: std.process.Init) !void {
         .width = screenWidth,
         .height = screenHeight,
         .cell_size_multiplier = 2, 
-        .multi_threaded = true,
+        .multi_threaded = false,
     });
     defer grid.deinit();
 
     var rects: std.MultiArrayList(RectEnt) = .empty;
     defer rects.deinit(allocator);
-    try genRects(allocator, &rects, screenWidth, screenHeight);
+    try genRects(allocator, io, &rects);
+
+    var circles: std.MultiArrayList(CircleEnt) = .empty;
+    defer circles.deinit(allocator);
+    try genCircles(allocator, io, &circles);
 
     rl.initWindow(screenWidth, screenHeight, "Test");
     defer rl.closeWindow(); 
 
     rl.setTargetFPS(60);
                          
-    const xs = rects.items(.x);
-    const ys = rects.items(.y);
-    const ws = rects.items(.w);
-    const hs = rects.items(.h);
-    const ids = rects.items(.id);
-    const locs = rects.items(.spawn_loc);
-    const tests = rects.items(.passed_test);
+    const rect_xs = rects.items(.x);
+    const rect_ys = rects.items(.y);
+    const rect_ws = rects.items(.w);
+    const rect_hs = rects.items(.h);
+    const rect_ids = rects.items(.id);
+    const rect_colors = rects.items(.color);
+    const rect_x_vels = rects.items(.x_vel);
+    const rect_y_vels = rects.items(.y_vel);
+
+    const circle_xs = circles.items(.x);
+    const circle_ys = circles.items(.y);
+    const circle_rs = circles.items(.r);
+    const circle_ids = circles.items(.id);
+    const circle_colors = circles.items(.color);
+    const circle_x_vels = circles.items(.x_vel);
+    const circle_y_vels = circles.items(.y_vel);
 
     try grid.ensureCapacity(rects.len, .Rect);
-    try grid.insertRects(ids, xs, ys, ws, hs);
+    try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
     try grid.updateCellSize(null);
 
-    while (!rl.windowShouldClose()) { // Detect window close button or ESC key
+    // gameloop
+    while(!rl.windowShouldClose()) { // Detect window close button or ESC key
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.white);
 
-        try grid.insertRects(ids, xs, ys, ws, hs);
+        try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
+        try grid.insertCircles(circle_ids, circle_xs, circle_ys, circle_rs);
 
-        for(xs, ys, locs) |*x, *y, loc| {
-            _ = x;
-            if(loc == .top) {
-                y.* += speed * rl.getFrameTime();
-            } else if(loc == .bottom) {
-                y.* += -speed * rl.getFrameTime();
-            }
+        for(rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
+            color.* = .gray;
+            move(x, x_vel, y, y_vel);
+            bounce(x, x_vel, w, screenWidth);
+            bounce(y, y_vel, h, screenHeight);
+        }
+
+        for(circle_xs, circle_x_vels, circle_ys, circle_y_vels, circle_rs, circle_colors) |*x, *x_vel, *y, *y_vel, r, *color| {
+            color.* = .gray;
+            move(x, x_vel, y, y_vel);
+            bounce(x, x_vel, r, screenWidth);
+            bounce(y, y_vel, r, screenHeight);
         }
 
         const results = try grid.update();
         if(results.items.len == 0) std.debug.print("No results \r", .{});
         for(results.items) |result| {
-            tests[result.a] = true;
-            tests[result.b] = true;
+            if(std.mem.findScalar(u32, rect_ids, result.a)) |idx| {
+                var ent = rects.get(idx); 
+                ent.color = .green;
+                rects.set(idx, ent);
+            }
+            else if(std.mem.findScalar(u32, circle_ids, result.a)) |idx| {
+                var ent = circles.get(idx); 
+                ent.color = .green;
+                circles.set(idx, ent);
+            }
+
+            if(std.mem.findScalar(u32, rect_ids, result.b)) |idx| {
+                var ent = rects.get(idx); 
+                ent.color = .green;
+                rects.set(idx, ent);
+            }
+            else if(std.mem.findScalar(u32, circle_ids, result.b)) |idx| {
+                var ent = circles.get(idx); 
+                ent.color = .green;
+                circles.set(idx, ent);
+            }
         }
 
-        for(xs, ys, ws, hs, tests) |x, y, w, h, passed| {
-            const color: rl.Color = if(passed) .green else .red;
+        for(rect_xs, rect_ys, rect_ws, rect_hs, rect_colors) |x, y, w, h, color| {
             rl.drawRectangleV(.init(x, y), .init(w, h), color);
+        }
+
+        for(circle_xs, circle_ys, circle_rs, circle_colors) |x, y, r, color| {
+            rl.drawCircleV(.init(x, y), r, color);
         }
     }
 }
 
-fn genRects(allocator: std.mem.Allocator, rects: *std.MultiArrayList(RectEnt), screenWidth: f32, screenHeight: f32) !void {
-    var i: usize = 0;
-    var x: f32 = 0;
-    var y: f32 = 10;
-    const w: f32 = 25;
-    const h: f32 = 25;
-    const pad: f32 = 5;
+fn move(x: *f32, x_vel: *f32, y: *f32, y_vel: *f32) void {
+    x.* += x_vel.* * rl.getFrameTime();
+    y.* += y_vel.* * rl.getFrameTime();
+}
 
-    var passed_once = false;
-    while(true) {
-        while(x + pad < screenWidth) : (i += 1) {
-            const rect: RectEnt = .{
-                .x = x,
-                .y = y, 
-                .w = w,
-                .h = h,
-                .id = @intCast(i), 
-                .spawn_loc = if(y < screenHeight / 2) .top else .bottom,
-            };
+fn bounce(pos: *f32, vel: *f32, size: f32, bound: f32) void {
+    if(pos.* < 0) {
+        pos.* = 0;
+        vel.* = @abs(vel.*);
+    } else if(pos.* + size > bound) {
+        pos.* = bound - size;
+        vel.* = -@abs(vel.*);
+    }
+}
 
-            try rects.append(allocator, rect); 
-            x += w + pad;
-        }
-        if(passed_once) break;
+fn genRects(allocator: std.mem.Allocator, io: std.Io, rects: *std.MultiArrayList(RectEnt)) !void {
+    const src: std.Random.IoSource = .{.io = io};
+    const rng = src.interface();
 
-        passed_once = true;
-        y = screenHeight - 10;
-        x = 0;
+    for(0..rect_count) |_| {
+        const x: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenWidth));
+        const y: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenHeight));
+        const x_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const y_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+
+        const rect: RectEnt = .{
+            .x = x,
+            .y = y,
+            .x_vel = x_vel,
+            .y_vel = y_vel,
+            .id = id,
+        };
+        try rects.append(allocator, rect);
+        id += 1;
+    }
+}
+
+fn genCircles(allocator: std.mem.Allocator, io: std.Io, circles: *std.MultiArrayList(CircleEnt)) !void {
+    const src: std.Random.IoSource = .{.io = io};
+    const rng = src.interface();
+
+    for(0..rect_count) |_| {
+        const x: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenWidth));
+        const y: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenHeight));
+        const x_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const y_vel: f32 = if(rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+
+        const circle: CircleEnt = .{
+            .x = x,
+            .y = y,
+            .x_vel = x_vel,
+            .y_vel = y_vel,
+            .id = id,
+        };
+
+        try circles.append(allocator, circle);
+        id += 1;
     }
 }
