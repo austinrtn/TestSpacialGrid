@@ -63,20 +63,35 @@ pub fn main(init: std.process.Init) !void {
     });
     defer grid.deinit();
 
-    ents = try allocator.alloc(EntRef, rect_count + point_count + circle_count);
+    ents = try allocator.alloc(EntRef, rect_count + point_count + circle_count + 1);
     defer allocator.free(ents);
+
+    var mouse_color: rl.Color = .gray;
+    mouse_color.a = 100;
+    var mouse_circ = CircleEnt{
+        .x = 0,
+        .y = 0, 
+        .r = 30,
+        .color = mouse_color,
+        .x_vel = 0, 
+        .y_vel = 0,
+        .id = @intCast(ent_counter),
+    };
+
+    ent_counter += 1;
+
+    var circles: std.MultiArrayList(CircleEnt) = .empty;
+    defer circles.deinit(allocator);
 
     var rects: std.MultiArrayList(RectEnt) = .empty;
     defer rects.deinit(allocator);
     try genRects(allocator, io, &rects);
 
-    var circles: std.MultiArrayList(CircleEnt) = .empty;
-    defer circles.deinit(allocator);
-    try genCircles(allocator, io, &circles);
-
     var points: std.MultiArrayList(PointEnt) = .empty;
     defer points.deinit(allocator);
     try genPoints(allocator, io, &points);
+
+    try genCircles(allocator, io, &circles);
 
     rl.initWindow(screenWidth, screenHeight, "Test");
     defer rl.closeWindow();
@@ -105,9 +120,9 @@ pub fn main(init: std.process.Init) !void {
     const point_ids = points.items(.id);
     const point_colors = points.items(.color);
 
-    try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
-    try grid.insertCircles(circle_ids, circle_xs, circle_ys, circle_rs);
-    try grid.insertPoints(point_ids, point_xs, point_ys);
+    try grid.insert().rects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
+    try grid.insert().circles(circle_ids, circle_xs, circle_ys, circle_rs);
+    try grid.insert().points(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
     // gameloop
@@ -115,6 +130,10 @@ pub fn main(init: std.process.Init) !void {
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.white);
+
+        mouse_circ.color = mouse_color;
+        mouse_circ.x = rl.getMousePosition().x;
+        mouse_circ.y = rl.getMousePosition().y;
 
         for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
             color.* = .gray;
@@ -130,12 +149,24 @@ pub fn main(init: std.process.Init) !void {
             bounce(y, y_vel, r, screenHeight);
         }
 
-        try grid.insertRects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
-        try grid.insertCircles(circle_ids, circle_xs, circle_ys, circle_rs);
-        try grid.insertPoints(point_ids, point_xs, point_ys);
+        try grid.insert().rects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
+        try grid.insert().circles(circle_ids, circle_xs, circle_ys, circle_rs);
+        try grid.insert().points(point_ids, point_xs, point_ys);
 
         for (point_colors) |*color| {
             color.* = .gray;
+        }
+    
+        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, mouse_circ.id, .{ .Circle = mouse_circ.r});
+        for(mouse_query.items) |result| {
+            mouse_circ.color = .green;
+
+            const ref = ents[result.b];
+            switch(ref.kind) {
+                .circle => circle_colors[ref.index] = .green,
+                .rect => rect_colors[ref.index] = .green,
+                .point => point_colors[ref.index] = .green,
+            }
         }
 
         const results = try grid.update();
@@ -156,6 +187,8 @@ pub fn main(init: std.process.Init) !void {
         for (point_xs, point_ys, point_colors) |x, y, color| {
             rl.drawCircleV(.init(x, y), point_radius, color);
         }
+
+        rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), 25, mouse_circ.color);
     }
 }
 
