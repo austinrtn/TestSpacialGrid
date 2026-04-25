@@ -157,11 +157,9 @@ pub fn main(init: std.process.Init) !void {
             color.* = .gray;
         }
     
-        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, mouse_circ.id, .{ .Circle = mouse_circ.r});
-        for(mouse_query.items) |result| {
-            mouse_circ.color = .green;
-
-            const ref = ents[result.b];
+        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, .{ .Circle = mouse_circ.r});
+        for(mouse_query) |id| {
+            const ref = ents[id];
             switch(ref.kind) {
                 .circle => circle_colors[ref.index] = .green,
                 .rect => rect_colors[ref.index] = .green,
