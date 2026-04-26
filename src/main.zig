@@ -51,6 +51,15 @@ var moving = true;
 var ents: []EntRef = undefined;
 var ent_counter: usize = 0;
 
+const field_map = ZGL.InsertionFieldMap{
+    .xs = "x",
+    .ys = "y", 
+    .ws = "w", 
+    .hs = "h",
+    .ids = "id",
+    .radii = "r",
+};
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
@@ -103,7 +112,6 @@ pub fn main(init: std.process.Init) !void {
     const circle_xs = circles.items(.x);
     const circle_ys = circles.items(.y);
     const circle_rs = circles.items(.r);
-    const circle_ids = circles.items(.id);
     const circle_colors = circles.items(.color);
     const circle_x_vels = circles.items(.x_vel);
     const circle_y_vels = circles.items(.y_vel);
@@ -113,9 +121,9 @@ pub fn main(init: std.process.Init) !void {
     const point_ids = points.items(.id);
     const point_colors = points.items(.color);
 
-    try grid.insert(.{}).circlesMAL(circles);
-    try grid.insert(.{}).rects(rects.items(.id), rects.items(.x), rects.items(.y), rects.items(.w), rects.items(.h));
-    try grid.insert(.{}).points(point_ids, point_xs, point_ys);
+    try grid.insert(field_map).circlesMAL(circles);
+    try grid.insert(field_map).rects(rects.items(.id), rects.items(.x), rects.items(.y), rects.items(.w), rects.items(.h));
+    try grid.insert(field_map).points(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
     // gameloop
@@ -157,9 +165,9 @@ pub fn main(init: std.process.Init) !void {
             bounce(y, y_vel, r, screenHeight);
         }
 
-        try grid.insert().rects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
-        try grid.insert().circles(circle_ids, circle_xs, circle_ys, circle_rs);
-        try grid.insert().points(point_ids, point_xs, point_ys);
+        try grid.insert(field_map).circlesMAL(circles);
+        try grid.insert(field_map).rects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
+        try grid.insert(field_map).points(point_ids, point_xs, point_ys);
 
         for (point_colors) |*color| {
             color.* = .gray;
