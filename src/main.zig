@@ -40,11 +40,13 @@ const PointEnt = struct {
 
 const screenWidth = 800;
 const screenHeight = 800;
-const rect_count = 50;
-const circle_count = 50;
-const point_count = 50;
+const total_count = 10;
+const rect_count = @divTrunc(total_count, 3);
+const circle_count = @divTrunc(total_count, 3);
+const point_count = @divTrunc(total_count, 3);
 const point_radius = 3;
 const speed = 100;
+var moving = true;
 
 var ents: []EntRef = undefined;
 var ent_counter: usize = 0;
@@ -70,10 +72,10 @@ pub fn main(init: std.process.Init) !void {
     mouse_color.a = 100;
     var mouse_circ = CircleEnt{
         .x = 0,
-        .y = 0, 
+        .y = 0,
         .r = 30,
         .color = mouse_color,
-        .x_vel = 0, 
+        .x_vel = 0,
         .y_vel = 0,
         .id = @intCast(ent_counter),
     };
@@ -98,15 +100,6 @@ pub fn main(init: std.process.Init) !void {
 
     rl.setTargetFPS(60);
 
-    const rect_xs = rects.items(.x);
-    const rect_ys = rects.items(.y);
-    const rect_ws = rects.items(.w);
-    const rect_hs = rects.items(.h);
-    const rect_ids = rects.items(.id);
-    const rect_colors = rects.items(.color);
-    const rect_x_vels = rects.items(.x_vel);
-    const rect_y_vels = rects.items(.y_vel);
-
     const circle_xs = circles.items(.x);
     const circle_ys = circles.items(.y);
     const circle_rs = circles.items(.r);
@@ -120,9 +113,9 @@ pub fn main(init: std.process.Init) !void {
     const point_ids = points.items(.id);
     const point_colors = points.items(.color);
 
-    try grid.insert().rects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
-    try grid.insert().circles(circle_ids, circle_xs, circle_ys, circle_rs);
-    try grid.insert().points(point_ids, point_xs, point_ys);
+    try grid.insert(.{}).circlesMAL(circles);
+    try grid.insert(.{}).rects(rects.items(.id), rects.items(.x), rects.items(.y), rects.items(.w), rects.items(.h));
+    try grid.insert(.{}).points(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
     // gameloop
@@ -130,6 +123,21 @@ pub fn main(init: std.process.Init) !void {
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.white);
+
+        controller(.{
+            .allocator = allocator,
+            .io = io,
+            .rects = &rects,
+        });
+
+        const rect_xs = rects.items(.x);
+        const rect_ys = rects.items(.y);
+        const rect_ws = rects.items(.w);
+        const rect_hs = rects.items(.h);
+        const rect_ids = rects.items(.id);
+        const rect_colors = rects.items(.color);
+        const rect_x_vels = rects.items(.x_vel);
+        const rect_y_vels = rects.items(.y_vel);
 
         mouse_circ.color = mouse_color;
         mouse_circ.x = rl.getMousePosition().x;
@@ -156,11 +164,11 @@ pub fn main(init: std.process.Init) !void {
         for (point_colors) |*color| {
             color.* = .gray;
         }
-    
-        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, .{ .Circle = mouse_circ.r});
-        for(mouse_query) |id| {
+
+        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, .{ .Circle = mouse_circ.r });
+        for (mouse_query) |id| {
             const ref = ents[id];
-            switch(ref.kind) {
+            switch (ref.kind) {
                 .circle => circle_colors[ref.index] = .green,
                 .rect => rect_colors[ref.index] = .green,
                 .point => point_colors[ref.index] = .green,
@@ -199,24 +207,19 @@ fn markCollision(
     const ent_ref = ents[@intCast(global_id)];
     switch (ent_ref.kind) {
         .rect => {
-            var ent = rects.get(ent_ref.index);
-            ent.color = .green;
-            rects.set(ent_ref.index, ent);
+            rects.items(.color)[ent_ref.index] = .green;
         },
         .circle => {
-            var ent = circles.get(ent_ref.index);
-            ent.color = .green;
-            circles.set(ent_ref.index, ent);
+            circles.items(.color)[ent_ref.index] = .green;
         },
         .point => {
-            var ent = points.get(ent_ref.index);
-            ent.color = .green;
-            points.set(ent_ref.index, ent);
+            points.items(.color)[ent_ref.index] = .green;
         },
     }
 }
 
 fn move(x: *f32, x_vel: *f32, y: *f32, y_vel: *f32) void {
+    if (!moving) return;
     x.* += x_vel.* * rl.getFrameTime();
     y.* += y_vel.* * rl.getFrameTime();
 }
@@ -228,6 +231,33 @@ fn bounce(pos: *f32, vel: *f32, size: f32, bound: f32) void {
     } else if (pos.* + size > bound) {
         pos.* = bound - size;
         vel.* = -@abs(vel.*);
+    }
+}
+
+fn addRects(allocator: std.mem.Allocator, io: std.Io, rects: *std.MultiArrayList(RectEnt), count: usize) !void {
+    const src: std.Random.IoSource = .{ .io = io };
+    const rng = src.interface();
+
+    ents = try allocator.realloc(ents, ents.len + count);
+
+    for (0..count) |_| {
+        const x: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenWidth));
+        const y: f32 = @floatFromInt(rng.intRangeAtMost(u32, 0, screenHeight));
+        const x_vel: f32 = if (rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+        const y_vel: f32 = if (rng.intRangeAtMost(usize, 0, 1) == 0) speed else -speed;
+
+        const rect: RectEnt = .{
+            .x = x,
+            .y = y,
+            .x_vel = x_vel,
+            .y_vel = y_vel,
+            .id = @intCast(ent_counter),
+        };
+        const local_index = rects.len;
+        try rects.append(allocator, rect);
+
+        ents[ent_counter] = .{ .kind = .rect, .index = local_index };
+        ent_counter += 1;
     }
 }
 
@@ -301,5 +331,15 @@ fn genPoints(allocator: std.mem.Allocator, io: std.Io, points: *std.MultiArrayLi
 
         ents[ent_counter] = .{ .kind = .point, .index = local_index };
         ent_counter += 1;
+    }
+}
+
+fn controller(stuff: anytype) void {
+    if (rl.isKeyPressed(.space)) {
+        if (moving) moving = false else moving = true;
+    }
+
+    if (rl.isKeyPressed(.one)) {
+        addRects(stuff.allocator, stuff.io, stuff.rects, 10) catch return;
     }
 }
