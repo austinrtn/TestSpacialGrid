@@ -40,7 +40,8 @@ const PointEnt = struct {
 
 const screenWidth = 800;
 const screenHeight = 800;
-const total_count = 10;
+const m_threaded = true;
+const total_count = 5000;
 const rect_count = @divTrunc(total_count, 3);
 const circle_count = @divTrunc(total_count, 3);
 const point_count = @divTrunc(total_count, 3);
@@ -53,8 +54,8 @@ var ent_counter: usize = 0;
 
 const field_map = ZGL.InsertionFieldMap{
     .xs = "x",
-    .ys = "y", 
-    .ws = "w", 
+    .ys = "y",
+    .ws = "w",
     .hs = "h",
     .ids = "id",
     .radii = "r",
@@ -70,7 +71,7 @@ pub fn main(init: std.process.Init) !void {
         .width = screenWidth,
         .height = screenHeight,
         .cell_size_multiplier = 2,
-        .multi_threaded = true,
+        .multi_threaded = m_threaded,
     });
     defer grid.deinit();
 
@@ -121,9 +122,9 @@ pub fn main(init: std.process.Init) !void {
     const point_ids = points.items(.id);
     const point_colors = points.items(.color);
 
-    try grid.insert(field_map).circlesMAL(circles);
-    try grid.insert(field_map).rects(rects.items(.id), rects.items(.x), rects.items(.y), rects.items(.w), rects.items(.h));
-    try grid.insert(field_map).points(point_ids, point_xs, point_ys);
+    try grid.insert.Circle.mal(field_map, circles);
+    try grid.insert.Rect.many(rects.items(.id), rects.items(.x), rects.items(.y), rects.items(.w), rects.items(.h));
+    try grid.insert.Point.many(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
     // gameloop
@@ -142,7 +143,6 @@ pub fn main(init: std.process.Init) !void {
         const rect_ys = rects.items(.y);
         const rect_ws = rects.items(.w);
         const rect_hs = rects.items(.h);
-        const rect_ids = rects.items(.id);
         const rect_colors = rects.items(.color);
         const rect_x_vels = rects.items(.x_vel);
         const rect_y_vels = rects.items(.y_vel);
@@ -165,9 +165,9 @@ pub fn main(init: std.process.Init) !void {
             bounce(y, y_vel, r, screenHeight);
         }
 
-        try grid.insert(field_map).circlesMAL(circles);
-        try grid.insert(field_map).rects(rect_ids, rect_xs, rect_ys, rect_ws, rect_hs);
-        try grid.insert(field_map).points(point_ids, point_xs, point_ys);
+        try grid.insert.Circle.mal(field_map, circles);
+        try grid.insert.Rect.mal(field_map, rects);
+        try grid.insert.Point.mal(field_map, points);
 
         for (point_colors) |*color| {
             color.* = .gray;
@@ -184,6 +184,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         const results = try grid.update();
+
         if (results.items.len == 0) std.debug.print("No results \r", .{});
         for (results.items) |result| {
             markCollision(result.a, &rects, &circles, &points);
@@ -204,6 +205,9 @@ pub fn main(init: std.process.Init) !void {
 
         rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), 25, mouse_circ.color);
     }
+
+    const p_results = try grid.getProfilerResults();
+    std.debug.print("\n\n{s}\n\n", .{p_results});
 }
 
 fn markCollision(
