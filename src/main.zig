@@ -5,49 +5,22 @@ const ZGL = @import("SpacialGrid").ZigGridLib(.{.Profiling = true});
 
 const EntType = enum { rect, circle, point };
 
-const EntRef = struct {
-    kind: EntType,
-    index: usize,
-};
-
-const RectEnt = struct {
-    x: f32,
-    y: f32,
-    w: f32 = 15,
-    h: f32 = 15,
-    x_vel: f32,
-    y_vel: f32,
-    color: rl.Color = .gray,
-    id: u32,
-};
-
-const CircleEnt = struct {
-    x: f32,
-    y: f32,
-    r: f32 = 15,
-    x_vel: f32,
-    y_vel: f32,
-    color: rl.Color = .gray,
-    id: u32,
-};
-
-const PointEnt = struct {
-    x: f32,
-    y: f32,
-    color: rl.Color = .gray,
-    id: u32,
-};
-
+const total_count = 1000;
+const shape_size = 10;
 const screenWidth = 800;
 const screenHeight = 800;
 const m_threaded = true;
-const total_count = 5000;
 const rect_count = @divTrunc(total_count, 3);
 const circle_count = @divTrunc(total_count, 3);
 const point_count = @divTrunc(total_count, 3);
 const point_radius = 3;
 const speed = 100;
 var moving = true;
+
+const EntRef = struct {
+    kind: EntType,
+    index: usize,
+};
 
 var ents: []EntRef = undefined;
 var ent_counter: usize = 0;
@@ -210,6 +183,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), 25, mouse_circ.color);
+        grid.updateProfiler();
     }
     
     grid.stopProfiler();
@@ -364,3 +338,32 @@ fn controller(stuff: anytype) void {
         addRects(stuff.allocator, stuff.io, stuff.rects, 10) catch return;
     }
 }
+
+const RectEnt = struct {
+    x: f32,
+    y: f32,
+    w: f32 = shape_size,
+    h: f32 = shape_size,
+    x_vel: f32,
+    y_vel: f32,
+    color: rl.Color = .gray,
+    id: u32,
+};
+
+const CircleEnt = struct {
+    x: f32,
+    y: f32,
+    r: f32 = shape_size / 2,
+    x_vel: f32,
+    y_vel: f32,
+    color: rl.Color = .gray,
+    id: u32,
+};
+
+const PointEnt = struct {
+    x: f32,
+    y: f32,
+    color: rl.Color = .gray,
+    id: u32,
+};
+
