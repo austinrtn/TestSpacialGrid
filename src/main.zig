@@ -64,6 +64,9 @@ const field_map = ZGL.InsertionFieldMap{
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
+    var buf: [1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    const writer = &stdout.interface;
 
     var grid: *ZGL.SpacialGrid = try .init(.{
         .allocator = allocator,
@@ -105,6 +108,7 @@ pub fn main(init: std.process.Init) !void {
 
     try genCircles(allocator, io, &circles);
 
+    rl.setTraceLogLevel(.warning);
     rl.initWindow(screenWidth, screenHeight, "Test");
     defer rl.closeWindow();
 
@@ -210,7 +214,9 @@ pub fn main(init: std.process.Init) !void {
     
     grid.stopProfiler();
     const p_results = try grid.getProfilerResults();
-    std.debug.print("\n\n{s}\n\n", .{p_results});
+
+    try writer.print("\n\n{s}\n\n", .{p_results});
+    try writer.flush();
 }
 
 fn markCollision(
