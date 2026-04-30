@@ -127,10 +127,9 @@ pub fn main(init: std.process.Init) !void {
     try grid.insert.Point.many(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
+    grid.startProfiler(null); 
     // gameloop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
-        grid.startProfiler(null); 
-        defer grid.stopProfiler();
 
         rl.beginDrawing();
         defer rl.endDrawing();
@@ -208,7 +207,8 @@ pub fn main(init: std.process.Init) !void {
 
         rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), 25, mouse_circ.color);
     }
-
+    
+    grid.stopProfiler();
     const p_results = try grid.getProfilerResults();
     std.debug.print("\n\n{s}\n\n", .{p_results});
 }
