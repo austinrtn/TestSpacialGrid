@@ -1,7 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const rl = @import("raylib");
-const ZGL = @import("SpacialGrid").ZigGridLib(.{});
+const ZGL = @import("SpacialGrid").ZigGridLib(.{.Profiling = true});
 
 const EntType = enum { rect, circle, point };
 
@@ -129,6 +129,9 @@ pub fn main(init: std.process.Init) !void {
 
     // gameloop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
+        grid.startProfiler(null); 
+        defer grid.stopProfiler();
+
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.white);
