@@ -1,7 +1,7 @@
 const std = @import("std");
 const Io = std.Io;
 const rl = @import("raylib");
-const ZGL = @import("SpacialGrid").ZigGridLib(.{.Profiling = true});
+const ZGL = @import("SpacialGrid").ZigGridLib(.{ .Profiling = true });
 
 const EntType = enum { rect, circle, point };
 
@@ -104,7 +104,7 @@ pub fn main(init: std.process.Init) !void {
     try grid.insert.Point.many(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
-    grid.startProfiler(null); 
+    grid.startProfiler(null);
     // gameloop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
 
@@ -183,14 +183,11 @@ pub fn main(init: std.process.Init) !void {
         }
 
         rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), 25, mouse_circ.color);
-        grid.updateProfiler();
-    }
-    
-    grid.stopProfiler();
-    const p_results = try grid.getProfilerResults();
+        const p_results = try grid.getProfileResults(true);
 
-    try writer.print("\n\n{s}\n\n", .{p_results});
-    try writer.flush();
+        try writer.print("{s}\n\n", .{p_results});
+        try writer.flush();
+    }
 }
 
 fn markCollision(
@@ -366,4 +363,3 @@ const PointEnt = struct {
     color: rl.Color = .gray,
     id: u32,
 };
-
