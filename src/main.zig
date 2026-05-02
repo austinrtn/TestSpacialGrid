@@ -104,7 +104,7 @@ pub fn main(init: std.process.Init) !void {
     try grid.insert.Point.many(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
-    grid.startProfiler(null);
+    grid.startProfiler(500);
     // gameloop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
 
