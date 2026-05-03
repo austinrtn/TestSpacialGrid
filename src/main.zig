@@ -6,9 +6,10 @@ const ZGL = @import("SpacialGrid").ZigGridLib(.{ .Profiling = true });
 const EntType = enum { rect, circle, point };
 
 const total_count = 1000;
-const shape_size = 10;
-const screenWidth = 800;
-const screenHeight = 800;
+const fps_cap = 60;
+const shape_size = 12;
+const screenWidth = 1000;
+const screenHeight = 1000;
 const m_threaded = true;
 const rect_count = @divTrunc(total_count, 3);
 const circle_count = @divTrunc(total_count, 3);
@@ -85,7 +86,8 @@ pub fn main(init: std.process.Init) !void {
     rl.initWindow(screenWidth, screenHeight, "Test");
     defer rl.closeWindow();
 
-    rl.setTargetFPS(60);
+    rl.hideCursor();
+    rl.setTargetFPS(fps_cap);
 
     const circle_xs = circles.items(.x);
     const circle_ys = circles.items(.y);
@@ -104,6 +106,7 @@ pub fn main(init: std.process.Init) !void {
     try grid.insert.Point.many(point_ids, point_xs, point_ys);
     try grid.updateCellSize(null);
 
+    var snapshot = false;
     grid.startProfiler(500);
     // gameloop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
@@ -115,6 +118,7 @@ pub fn main(init: std.process.Init) !void {
         controller(.{
             .allocator = allocator,
             .io = io,
+            .snapshot = &snapshot,
             .rects = &rects,
         });
 
@@ -131,7 +135,7 @@ pub fn main(init: std.process.Init) !void {
         mouse_circ.y = rl.getMousePosition().y;
 
         for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
-            color.* = .gray;
+            color.* = rl.Color.light_gray;
             move(x, x_vel, y, y_vel);
             bounce(x, x_vel, w, screenWidth);
             bounce(y, y_vel, h, screenHeight);
@@ -149,7 +153,7 @@ pub fn main(init: std.process.Init) !void {
         try grid.insert.Point.mal(field_map, points);
 
         for (point_colors) |*color| {
-            color.* = .gray;
+            color.* = .dark_gray;
         }
 
         const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, .{ .Circle = mouse_circ.r });
@@ -187,6 +191,20 @@ pub fn main(init: std.process.Init) !void {
 
         try writer.print("{s}\n\n", .{p_results});
         try writer.flush();
+        
+        if(snapshot) {
+            const path = "results.txt";
+            var f_buf: [1024]u8 = undefined;
+            var file = std.Io.Dir.cwd().openFile(io, path, .{.mode = .read_write}) catch |err| switch(err) {
+                error.FileNotFound => try std.Io.Dir.cwd().createFile(io, path, .{}),
+                else => return err,
+            };
+            defer file.close(io); 
+
+            var f_writer = file.writer(io, &f_buf);
+            try f_writer.interface.print("{s}\n\n", .{p_results});
+            try f_writer.interface.flush();
+        }
     }
 }
 
@@ -327,13 +345,8 @@ fn genPoints(allocator: std.mem.Allocator, io: std.Io, points: *std.MultiArrayLi
 }
 
 fn controller(stuff: anytype) void {
-    if (rl.isKeyPressed(.space)) {
-        if (moving) moving = false else moving = true;
-    }
-
-    if (rl.isKeyPressed(.one)) {
-        addRects(stuff.allocator, stuff.io, stuff.rects, 10) catch return;
-    }
+    if(rl.isKeyPressed(.space)) { if (moving) moving = false else moving = true; }
+    if(rl.isKeyPressed(.enter)) stuff.snapshot.* = true;
 }
 
 const RectEnt = struct {

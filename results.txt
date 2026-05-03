@@ -1,0 +1,40 @@
+[2J [HSpacial Grid Profiling
+______________________
+
+Grid
+  Build      : Debug
+  Time       : 2.50s
+  Frame      : 150
+  Threads    : 6
+  FPS        : 59.75
+
+Shapes
+  Total      : 999
+
+  Type    | Count | Avg Size | Min Size | Max Size
+  Circle  |   333 |   113.10 |   113.10 |   113.10
+  Rect    |   333 |   144.00 |   144.00 |   144.00
+  Point   |   333 |     0.00 |     0.00 |     0.00
+
+Cells
+  Rows       : 42
+  Cols       : 42
+  Cell Size  : 24.00
+  Cell Count : 1764
+
+  Type      | Avg Shapes/Cell | Empty Cells | Max In Cell
+  Combined  |            0.57 |         984 |     4
+  Circle    |            0.19 |        1457 |     4
+  Rect      |            0.19 |        1459 |     2
+  Point     |            0.19 |        1458 |     2
+
+Timing
+  Stage               | Last (ms) | Percent
+  Build               |    0.2240 |  27.02%
+  Insert Circles      |    0.0015 |   0.18%
+  Insert Rects        |    0.0014 |   0.17%
+  Insert Points       |    0.0010 |   0.12%
+  Finding Collisions  |    0.6011 |  72.52%
+  Update              |    0.6097 |       -
+
+
