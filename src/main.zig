@@ -202,7 +202,10 @@ pub fn main(init: std.process.Init) !void {
             defer file.close(io); 
 
             var f_writer = file.writer(io, &f_buf);
-            try f_writer.interface.print("{s}\n\n", .{p_results});
+            try f_writer.seekTo(try file.length(io));
+            try f_writer.interface.print("{s}\n", .{p_results});
+            for(0..50) |_| try f_writer.interface.writeAll("_");
+            try f_writer.interface.writeAll("\n\n\n\n");
             try f_writer.interface.flush();
         }
     }
