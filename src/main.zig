@@ -107,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
     try grid.updateCellSize(null);
 
     var snapshot = false;
-    grid.startProfiler(500);
+    grid.startProfiler();
     // gameloop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
 
@@ -134,7 +134,8 @@ pub fn main(init: std.process.Init) !void {
         mouse_circ.x = rl.getMousePosition().x;
         mouse_circ.y = rl.getMousePosition().y;
 
-        for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
+        for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) 
+        |*x, *x_vel, *y, *y_vel, w, h, *color| {
             color.* = rl.Color.light_gray;
             move(x, x_vel, y, y_vel);
             bounce(x, x_vel, w, screenWidth);
