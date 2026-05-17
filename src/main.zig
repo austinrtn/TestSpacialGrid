@@ -5,16 +5,18 @@ const ZGL = @import("SpacialGrid").ZigGridLib(.{ .Profiling = true });
 
 const EntType = enum { rect, circle, point };
 
-const total_count = 1000;
+const total_count = 50_000;
 const fps_cap = 60;
 const shape_size = 12;
-const screenWidth = 1000;
-const screenHeight = 1000;
+const screenWidth = 3000;
+const screenHeight = 3000;
 const m_threaded = true;
 const rect_count = @divTrunc(total_count, 3);
 const circle_count = @divTrunc(total_count, 3);
-const point_count = @divTrunc(total_count, 3);
+const point_count = 0;
 const point_radius = 3;
+const mouse_radius: f32 = 30;
+const min_query_cell_size_multiplier: f32 = (mouse_radius + @as(f32, shape_size) / 2.0) / @as(f32, shape_size) + 0.25;
 const speed = 100;
 var moving = true;
 
@@ -47,7 +49,7 @@ pub fn main(init: std.process.Init) !void {
         .io = io,
         .width = screenWidth,
         .height = screenHeight,
-        .cell_size_multiplier = 2,
+        .cell_size_multiplier = min_query_cell_size_multiplier,
         .multi_threaded = m_threaded,
     });
     defer grid.deinit();
@@ -60,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
     var mouse_circ = CircleEnt{
         .x = 0,
         .y = 0,
-        .r = 30,
+        .r = mouse_radius,
         .color = mouse_color,
         .x_vel = 0,
         .y_vel = 0,
@@ -116,6 +118,7 @@ pub fn main(init: std.process.Init) !void {
         rl.clearBackground(.white);
 
         controller(.{
+            .grid = grid,
             .allocator = allocator,
             .io = io,
             .snapshot = &snapshot,
@@ -134,8 +137,7 @@ pub fn main(init: std.process.Init) !void {
         mouse_circ.x = rl.getMousePosition().x;
         mouse_circ.y = rl.getMousePosition().y;
 
-        for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) 
-        |*x, *x_vel, *y, *y_vel, w, h, *color| {
+        for (rect_xs, rect_x_vels, rect_ys, rect_y_vels, rect_ws, rect_hs, rect_colors) |*x, *x_vel, *y, *y_vel, w, h, *color| {
             color.* = rl.Color.light_gray;
             move(x, x_vel, y, y_vel);
             bounce(x, x_vel, w, screenWidth);
@@ -157,22 +159,22 @@ pub fn main(init: std.process.Init) !void {
             color.* = .dark_gray;
         }
 
-        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, .{ .Circle = mouse_circ.r });
-        for (mouse_query) |id| {
-            const ref = ents[id];
-            switch (ref.kind) {
-                .circle => circle_colors[ref.index] = .green,
-                .rect => rect_colors[ref.index] = .green,
-                .point => point_colors[ref.index] = .green,
-            }
-        }
-
         const results = try grid.update();
 
         if (results.items.len == 0) std.debug.print("No results \r", .{});
         for (results.items) |result| {
             markCollision(result.a, &rects, &circles, &points);
             markCollision(result.b, &rects, &circles, &points);
+        }
+
+        const mouse_query = try grid.query(mouse_circ.x, mouse_circ.y, .{ .Circle = mouse_circ.r });
+        for (mouse_query) |id| {
+            const ref = ents[id];
+            switch (ref.kind) {
+                .circle => circle_colors[ref.index] = .blue,
+                .rect => rect_colors[ref.index] = .blue,
+                .point => point_colors[ref.index] = .blue,
+            }
         }
 
         for (rect_xs, rect_ys, rect_ws, rect_hs, rect_colors) |x, y, w, h, color| {
@@ -187,25 +189,25 @@ pub fn main(init: std.process.Init) !void {
             rl.drawCircleV(.init(x, y), point_radius, color);
         }
 
-        rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), 25, mouse_circ.color);
+        rl.drawCircleV(.init(mouse_circ.x, mouse_circ.y), mouse_circ.r, mouse_circ.color);
         const p_results = try grid.getProfileResults(true);
 
         try writer.print("{s}\n\n", .{p_results});
         try writer.flush();
-        
-        if(snapshot) {
+
+        if (snapshot) {
             const path = "results.txt";
             var f_buf: [1024]u8 = undefined;
-            var file = std.Io.Dir.cwd().openFile(io, path, .{.mode = .read_write}) catch |err| switch(err) {
+            var file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write }) catch |err| switch (err) {
                 error.FileNotFound => try std.Io.Dir.cwd().createFile(io, path, .{}),
                 else => return err,
             };
-            defer file.close(io); 
+            defer file.close(io);
 
             var f_writer = file.writer(io, &f_buf);
             try f_writer.seekTo(try file.length(io));
             try f_writer.interface.print("{s}\n", .{p_results});
-            for(0..50) |_| try f_writer.interface.writeAll("_");
+            for (0..50) |_| try f_writer.interface.writeAll("_");
             try f_writer.interface.writeAll("\n\n\n\n");
             try f_writer.interface.flush();
         }
@@ -349,8 +351,20 @@ fn genPoints(allocator: std.mem.Allocator, io: std.Io, points: *std.MultiArrayLi
 }
 
 fn controller(stuff: anytype) void {
-    if(rl.isKeyPressed(.space)) { if (moving) moving = false else moving = true; }
-    if(rl.isKeyPressed(.enter)) stuff.snapshot.* = true;
+    if (rl.isKeyPressed(.space)) {
+        if (moving) moving = false else moving = true;
+    }
+    if (rl.isKeyPressed(.enter)) stuff.snapshot.* = true;
+
+    if (rl.isKeyPressed(.left)) {
+        // query() checks a 3x3 cell neighborhood, so cells must cover the mouse probe reach.
+        stuff.grid.cell_size_multiplier = @max(min_query_cell_size_multiplier, stuff.grid.cell_size_multiplier - 0.25);
+        stuff.grid.updateCellSize(null) catch {};
+    }
+    if (rl.isKeyPressed(.right)) {
+        stuff.grid.cell_size_multiplier += 0.25;
+        stuff.grid.updateCellSize(null) catch {};
+    }
 }
 
 const RectEnt = struct {
